@@ -68,3 +68,18 @@ def deprecated(msg, dep_version):
 		return inner
 
 	return wrapper
+
+
+def frequency_count(iterable, recurse=False):
+	freq = {}
+	for i in iterable:
+		if recurse and isinstance(i, (list, tuple)):
+			for i, v in frequency_count(i, recurse=recurse).items():
+				if not freq.get(i):
+					freq[i] = 0
+				freq[i] += v
+		else:
+			if not freq.get(i):
+				freq[i] = 0
+			freq[i] += 1
+	return freq

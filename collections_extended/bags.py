@@ -1,11 +1,11 @@
 """Bag class definitions."""
 import heapq
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, namedtuple, OrderedDict
 from collections.abc import Collection, Hashable, Set
 from operator import itemgetter
 
-from ._util import deprecated
+from ._util import deprecated, frequency_count
 
 __all__ = (
 	'Bag',
@@ -49,7 +49,8 @@ class UniqueElementsView(BagView):
 
 	def __iter__(self):
 		for elem in self.bag._dict:
-			yield elem
+			bag = self.bag._dict.get(elem)
+			yield bag.bag if bag else None
 
 	def __contains__(self, elem):
 		return elem in self.bag
@@ -75,6 +76,8 @@ class CountsView(BagView):
 		return self.bag.count(elem) == count
 
 
+BagItem = namedtuple('BagItem', ['count', 'bag'])
+
 class Bag(Collection):
 	"""Base class for bag classes.
 
@@ -93,24 +96,35 @@ class Bag(Collection):
 
 		This runs in O(len(iterable))
 		"""
+		#self._dict = OrderedDict()
 		self._dict = dict()
 		self._size = 0
 		if iterable:
 			if isinstance(iterable, Bag):
+				#self._dict[self.bag_id(iterable)] = BagItem(iterable._size, iterable)
 				self._dict = iterable._dict.copy()
 				self._size = iterable._size
 			else:
 				for value in iterable:
 					self._increment_count(value)
 
+	@classmethod
+	def bag_id(cls, bag):
+		if isinstance(bag, (str, int)):
+			return bag
+		return hash(tuple((bag)))
+
+	def _get_bag(self, value):
+		return self._dict.get(self.bag_id(value), 0)
+
 	def _set_count(self, elem, count):
 		if count < 0:
 			raise ValueError
 		self._size += count - self.count(elem)
 		if count == 0:
-			self._dict.pop(elem, None)
+			self._dict.pop(self.bag_id(elem), None)
 		else:
-			self._dict[elem] = count
+			self._dict[self.bag_id(elem)] = BagItem(count, elem)
 
 	def _increment_count(self, elem, count=1):
 		self._set_count(elem, self.count(elem) + count)
@@ -129,6 +143,17 @@ class Bag(Collection):
 		out._size = self._size
 		return out
 
+	def _repr_values(self):
+		values = tuple()
+		for count, bag in self._dict.values():
+			bag_class = bag.__class__
+			if bag_class in [str, int]:
+				values += (bag, )*count
+			else:
+				for _ in range(count):
+					values += (repr(bag), )
+		return values
+
 	def __repr__(self):
 		if self._size == 0:
 			return '{0}()'.format(self.__class__.__name__)
@@ -137,6 +162,7 @@ class Bag(Collection):
 			return repr_format.format(
 				class_name=self.__class__.__name__,
 				values=tuple(self),
+				#values=self._repr_values()
 				)
 
 	def __str__(self):
@@ -178,7 +204,10 @@ class Bag(Collection):
 		Returns:
 			int: The count of value in self
 		"""
-		return self._dict.get(value, 0)
+		bag = self._get_bag(value)
+		if bag:
+			return bag.count
+		return 0
 
 	@deprecated(
 		"Use `heapq.nlargest(n, self.counts(), key=itemgetter(1))` instead or "
@@ -298,10 +327,46 @@ class Bag(Collection):
 			return NotImplemented
 		return len(self) >= len(other) and self.issuperset(other)
 
+	@classmethod
+	def bag_unpack_item(cls, bag):
+		if isinstance(bag, BagItem):
+			yield bag.count
+			for i in cls.bag_unpack_item(bag.bag):
+				yield i
+		elif isinstance(bag, Bag):
+			yield tuple(cls.bag_unpack(bag))
+		else:
+			yield bag
+
+	@classmethod
+	def bag_unpack(cls, bag):
+		for i in bag._dict.values():
+			for ii in cls.bag_unpack_item(i):
+				yield ii
+
 	def __eq__(self, other):
 		if not isinstance(other, Bag):
 			return False
-		return self._dict == other._dict
+
+		self_freq_count = tuple(frequency_count(self.bag_unpack_item(i), recurse=True) for i in self._dict.values())
+		other_freq_count = tuple(frequency_count(self.bag_unpack_item(i), recurse=True) for i in other._dict.values())
+		matched = []
+		for item_frequency in self_freq_count:
+			matched.append(item_frequency in other_freq_count)
+		return all(matched)
+
+		print(set(tuple(self.bag_unpack_item(i)) for i in self._dict.values()))
+		print(set(hash(tuple(frequency_count(self.bag_unpack_item(i), recurse=True))) for i in self._dict.values()))
+
+		print(set(tuple(self.bag_unpack_item(i)) for i in other._dict.values()))
+		print(tuple(frequency_count(self.bag_unpack_item(i), recurse=True) for i in other._dict.values()))
+		print(set(hash(tuple(frequency_count(other.bag_unpack_item(i), recurse=True))) for i in other._dict.values()))
+
+		return set(hash(set(frequency_count(self.bag_unpack_item(i), recurse=True).items())) for i in self._dict.values()) == set(hash(set(frequency_count(other.bag_unpack_item(i), recurse=True).items())) for i in other._dict.values())
+		#return set(hash(tuple(sorted(frequency_count(self.bag_unpack_item(i), recurse=True)))) for i in self._dict.values()) == set(hash(tuple(sorted(frequency_count(self.bag_unpack_item(i), recurse=True)))) for i in other._dict.values())
+
+		#return set(tuple(self.bag_unpack_item(i)) for i in self._dict.values()) == set(tuple(self.bag_unpack_item(i)) for i in other._dict.values())
+		#return set((i.count, self.bag_unpack(i.bag)) for i in self._dict.values()) == set((i.count, self.bag_unpack(i.bag)) for i in other._dict.values())
 
 	def __ne__(self, other):
 		return not (self == other)

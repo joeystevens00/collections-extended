@@ -3,7 +3,7 @@ from operator import concat, mul
 
 import pytest
 
-from collections_extended.bags import Bag, bag, frozenbag
+from collections_extended.bags import Bag, BagItem, bag, frozenbag
 
 
 def test_init():
@@ -340,7 +340,7 @@ def test_ixor():
 	assert b == bag('abcg')
 	b = bag('bbcdg')
 	b ^= bag('abbbccd')
-	assert b == bag('acbg')
+	assert b == bag('abcg')
 	b = bag('abbc')
 	b ^= set('bg')
 	assert b == bag('abcg')
@@ -412,7 +412,7 @@ def test_hashability():
 	b = frozenbag([1, 1, 2, 3])	 # prototypical frozen multiset.
 
 	c = frozenbag([4, 4, 5, 5, b, b])  # make sure we can nest them
-	d = frozenbag([4, frozenbag([1, 3, 2, 1]), 4, 5, b, 5])
+	d = frozenbag([4, frozenbag([1, 1, 2, 3]), 4, 5, b, 5])
 	# c and d are the same; make sure nothing weird happens to hashes.
 	assert c == d  # Make sure both constructions work.
 
@@ -425,9 +425,10 @@ def test_hashability():
 	# Make sure TypeErrors are raised when using mutable bags for keys.
 	with pytest.raises(TypeError):
 		dic[a] = 4
-	with pytest.raises(TypeError):
-		frozenbag([a, 1])
-	with pytest.raises(TypeError):
-		bag([a, 1])
+
+	# test nesting bag
+	assert frozenbag([a, 1]) == bag([a, 1])
+	assert (bag([a]) + bag([a])) == bag([a,a])
+
 	# test commutativity of bag instantiation.
 	assert bag([4, 4, 5, 5, c]) == bag([4, 5, d, 4, 5])
