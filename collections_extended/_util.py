@@ -1,4 +1,5 @@
 """util functions for collections_extended."""
+from collections import defaultdict
 from functools import wraps
 import textwrap
 import warnings
@@ -71,15 +72,11 @@ def deprecated(msg, dep_version):
 
 
 def frequency_count(iterable, recurse=False):
-	freq = {}
+	freq = defaultdict(lambda: 0)
 	for i in iterable:
 		if recurse and isinstance(i, (list, tuple)):
 			for i, v in frequency_count(i, recurse=recurse).items():
-				if not freq.get(i):
-					freq[i] = 0
 				freq[i] += v
 		else:
-			if not freq.get(i):
-				freq[i] = 0
 			freq[i] += 1
 	return freq
